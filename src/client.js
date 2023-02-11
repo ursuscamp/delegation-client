@@ -3,8 +3,8 @@ import jsonFormatHighlight from "json-format-highlight";
 import { getEventHash, nip26, relayInit, nip19 } from "nostr-tools";
 import { getDelegator } from "nostr-tools/nip26";
 
-// const RELAY = "wss://relay.snort.social";
-const RELAY = "wss://relay.damus.io";
+const RELAY = "wss://relay.snort.social";
+// const RELAY = "wss://relay.damus.io";
 
 Alpine.data("client", () => ({
   state: "init",
@@ -16,7 +16,7 @@ Alpine.data("client", () => ({
   logs: [],
   relay: null,
   pub: null,
-  published: true,
+  published: false,
 
   isstate(q) {
     return this.state === q;
@@ -55,47 +55,25 @@ Alpine.data("client", () => ({
       this.log(`Connection to relay ${RELAY}`);
       const ws = new WebSocket(RELAY);
       const sender = this;
-      ws.onopen = function (e) {
+      ws.onopen = (e) => {
         sender.log("Connection open");
-        sender.log(`Sending event ${sender.event}`);
-        ws.send(JSON.stringify(["EVENT", sender.event]));
+        sender.log(`Sending event ${this.event.id}`);
+        ws.send(JSON.stringify(["EVENT", this.event]));
       };
 
-      ws.onmessage = function (event) {
-        sender.log(`Message from server: ${event.data}`);
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data[0] === "NOTICE") {
+          this.err(`Error: ${data[1]}`);
+        } else if (data[0] === "OK") {
+          this.log(`Published: ${data[1]}`);
+          this.published = true;
+        }
       };
 
-      ws.onerror = function () {
+      ws.onerror = () => {
         sender.err("Connection error");
       };
-
-      // const relay = relayInit(RELAY);
-
-      // // Respond to relay events
-      // relay.on("connect", () => {
-      //   this.log(`Connected to relay ${relay.url}`);
-      // });
-      // relay.on("error", () => {
-      //   throw new Error(`Failed to connect to relay ${relay.url}`);
-      // });
-
-      // this.log(`Publishing event ${this.event.id}`);
-
-      // // Publish event
-      // let pub = relay.publish(this.pureEvent);
-      // pub.on("ok", () => {
-      //   this.log("Event published successfully!");
-      //   this.published = true;
-      // });
-      // pub.on("seen", () => {
-      //   this.log("Event was seen");
-      // });
-      // pub.on("failed", () => {
-      //   throw new Error(`Failed to publish event ${this.event.id}!`);
-      // });
-
-      // this.pub = pub;
-      // this.relay = relay;
     } catch (error) {
       this.err(error.message);
     }
@@ -138,6 +116,10 @@ Alpine.data("client", () => ({
     let noteid = nip19.noteEncode(this.event.id);
     let url = `https://snort.social/e/${noteid}`;
     return url;
+  },
+
+  get showContinue() {
+    return this.state !== "pubkey" || this.pubkey.length > 0;
   },
 }));
 
